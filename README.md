@@ -1,60 +1,77 @@
 # Text2SQL
 
-문서 근거와 스키마 정보를 바탕으로 SQL을 생성하고 실행하는 프로젝트입니다.
+자연어 질문을 SQL 쿼리로 변환하고 실제 데이터베이스에서 실행하여 결과를 검증하는 평가 트랙.
 
-## 목표
-- schema linking 향상
-- 실행 가능한 SQL 생성
-- 결과 정확도 기반 평가
+스키마 문서와 DB 경로가 주어지면, 모델이 올바른 SQL을 생성하고 실행하여 기대 결과와 일치하는지 평가한다. SQL 파싱, 스키마 링킹, 실행 성공, 결과 정확도의 4단계로 세분화하여 측정한다.
 
-## 실행
-```bash
-uv sync --extra dev
-```
+## 평가 메트릭
+
+| 메트릭 | 설명 |
+|--------|------|
+| `parse_success` | 모델 출력에서 유효한 SQL을 추출했는지 (0/1) |
+| `schema_link_error` | 생성된 SQL이 gold 패턴과 매칭되지 않는지 (0=매칭, 1=에러) |
+| `execution_success` | SQL이 DB에서 에러 없이 실행되었는지 (0/1) |
+| `result_accuracy` | 실행 결과가 gold result hash와 일치하는지 (0/1) |
+
+**성공 조건**: `result_accuracy > 0`
 
 ## 평가 파이프라인
 
-### 디렉토리 구조
-```
-eval/
-├── eval_runner.py      # → llm-os-eval-core (symlink)
-├── summarize.py        # → llm-os-eval-core (symlink)
-├── run_phase1.sh       # 8-GPU 병렬 평가 (소형~중형 모델)
-├── run_phase2.sh       # 추가 모델 평가 (Qwen3.6-27B, LFM 계열)
-└── internal/v1.jsonl   # 평가 데이터셋
-data/
-├── prepare_sft.py      # → llm-os-eval-core (symlink)
-├── sft_train.py        # → llm-os-eval-core (symlink)
-└── sft/                # SFT 학습 데이터
-    ├── train.jsonl
-    └── val.jsonl
+1. 모델이 자연어 질문 + 스키마 정보를 받아 SQL 생성
+2. `_extract_sql()`로 코드 펜스 또는 SQL 키워드 기반 추출
+3. `schema_link_error`: gold 패턴 regex와 매칭 확인
+4. SQLite DB에서 실제 실행
+5. 결과 행을 MD5 해시로 비교
+
+## 샘플 데이터 형식
+
+```json
+{
+  "sample_id": "sql_0001",
+  "user_query": "올해 1분기에 환불률이 5%를 넘은 상품군만 보여줘.",
+  "artifacts": {
+    "db_path": "/absolute/path/to/db/sales_v2.sqlite",
+    "schema_docs": ["schema_docs/schema.md", "schema_docs/business_rules.md"]
+  },
+  "gold": {
+    "acceptable_sql_patterns": ["SELECT.*category.*FROM", "refund.*rate.*>.*0\\.05"],
+    "result_hash": "a8c19b"
+  }
+}
 ```
 
-### 실행 방법
+## 프로젝트 구조
+
+```
+Text2SQL/
+├── README.md
+├── pyproject.toml
+├── databases/              # 기존 DB (hr_employees, ecommerce_orders)
+├── eval/
+│   ├── internal/
+│   │   ├── v0.jsonl        # 평가 데이터셋 (2샘플)
+│   │   └── db/             # 평가용 테스트 DB (sales_v2, billing_v1)
+│   └── results/
+├── tests/
+└── data/
+```
+
+## 실행
+
 ```bash
-# Phase 1: 소형~중형 모델 8종 병렬 평가
-bash eval/run_phase1.sh
+uv sync
 
-# Phase 2: 추가 모델 평가 (Qwen3.6-27B, LFM2-24B-A2B, LFM2.5-1.2B-Instruct)
-bash eval/run_phase2.sh
-
-# 결과 요약
-python eval/summarize.py --results-dir eval/results
+llm-os-eval run text2sql \
+  --model Qwen/Qwen3-4B \
+  --samples eval/internal/v0.jsonl \
+  --output eval/results/Qwen3-4B_v0.jsonl \
+  --base-url http://localhost:8001/v1
 ```
 
-### 평가 모델
+## 벤치마크 결과 (2026-04-23, Round 3)
 
-**Phase 1** (8-GPU 병렬):
-- GPU0: Qwen3.5-4B
-- GPU1: gemma-4-E2B-it
-- GPU2: gemma-4-E4B-it
-- GPU3: Qwen3.5-9B-text-only
-- GPU4: Qwen3.5-2B
-- GPU5: Qwen3.6-35B-A3B
-- GPU6: Qwen3.5-27B
-- GPU7: LFM2-2.6B
+| 모델 | Size | parse_success | execution_success | 성공률 |
+|------|------|---------------|-------------------|--------|
+| 전체 모델 | — | **100%** | 0% | 0% |
 
-**Phase 2** (추가):
-- Qwen/Qwen3.6-27B
-- LiquidAI/LFM2-24B-A2B (23.84B MoE)
-- LiquidAI/LFM2.5-1.2B-Instruct
+모든 모델이 SQL을 성공적으로 파싱하지만, 실제 DB 스키마와 불일치하여 실행 에러가 발생한다. 이는 모델이 테이블/컬럼 구조를 정확히 파악하지 못하기 때문이며, 스키마 문서를 프롬프트에 더 명확히 포함하면 개선 가능하다.
