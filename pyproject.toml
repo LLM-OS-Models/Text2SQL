@@ -19,6 +19,7 @@ dependencies = [
   "polars>=1.8",
   "pyarrow>=18.0",
   "huggingface-hub>=0.28",
+  "llm-os-eval-core",
 ]
 
 [project.optional-dependencies]
@@ -31,5 +32,7 @@ dev = [
   "ruff>=0.8",
 ]
 
+[tool.uv.sources]
+llm-os-eval-core = { path = "../llm-os-eval-core" }
+
 [tool.uv]
-no-binary = []
