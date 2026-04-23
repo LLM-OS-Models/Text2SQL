@@ -12,8 +12,9 @@
 | `schema_link_error` | 생성된 SQL이 gold 패턴과 매칭되지 않는지 (0=매칭, 1=에러) |
 | `execution_success` | SQL이 DB에서 에러 없이 실행되었는지 (0/1) |
 | `result_accuracy` | 실행 결과가 gold result hash와 일치하는지 (0/1) |
+| `result_f1` | Soft-F1 score comparing predicted vs gold result rows (0~1) |
 
-**성공 조건**: `result_accuracy > 0`
+**성공 조건**: `result_accuracy > 0 AND result_f1 >= 0.8`
 
 ## 평가 파이프라인
 
@@ -35,6 +36,8 @@
   },
   "gold": {
     "acceptable_sql_patterns": ["SELECT.*category.*FROM", "refund.*rate.*>.*0\\.05"],
+    "gold_sql": "SELECT category FROM products WHERE refund_rate > 0.05 AND quarter = 'Q1'",
+    "gold_result": [["전자제품", 0.07], ["의류", 0.06]],
     "result_hash": "a8c19b"
   }
 }
