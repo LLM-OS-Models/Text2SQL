@@ -1,0 +1,69 @@
+{
+  "project_name": "Text2SQL pilot",
+  "project_root": "../..",
+  "data": {
+    "train_path": "../../data/sft/train.jsonl",
+    "eval_path": "../../data/sft/val.jsonl",
+    "path_extractors": [
+      {
+        "role": "user",
+        "regex": "DB:\\n([^\\n]+)"
+      }
+    ]
+  },
+  "validation": {
+    "placeholder_patterns": [
+      "SELECT * FROM table WHERE condition;"
+    ]
+  },
+  "template": {
+    "apply_chat_template_kwargs": {
+      "enable_thinking": false
+    }
+  },
+  "model": {
+    "model_name": "unsloth/Qwen3-4B-unsloth-bnb-4bit",
+    "max_seq_length": 4096,
+    "load_in_4bit": true,
+    "load_in_8bit": false,
+    "load_in_16bit": false,
+    "full_finetuning": false
+  },
+  "lora": {
+    "r": 32,
+    "target_modules": [
+      "q_proj",
+      "k_proj",
+      "v_proj",
+      "o_proj",
+      "gate_proj",
+      "up_proj",
+      "down_proj"
+    ],
+    "lora_alpha": 32,
+    "lora_dropout": 0,
+    "bias": "none",
+    "use_gradient_checkpointing": "unsloth",
+    "random_state": 3407,
+    "use_rslora": false,
+    "loftq_config": null
+  },
+  "masking": {
+    "enabled": false
+  },
+  "training": {
+    "output_dir": "../../artifacts/unsloth/qwen3_4b_qlora_pilot",
+    "per_device_train_batch_size": 2,
+    "gradient_accumulation_steps": 4,
+    "warmup_steps": 10,
+    "num_train_epochs": 2,
+    "max_steps": -1,
+    "learning_rate": 0.0001,
+    "logging_steps": 1,
+    "optim": "adamw_8bit",
+    "weight_decay": 0.01,
+    "lr_scheduler_type": "linear",
+    "seed": 3407,
+    "report_to": "none"
+  }
+}
